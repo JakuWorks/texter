@@ -1,0 +1,21 @@
+necessities:
+
+
+PHONE:															
+termux
+python
+pkg install termux-api
+INSTALL THE TERMUX API APP
+
+PC:
+python
+pyperclip
+
+BUILD:
+shiv
+
+
+Add text indicating the number of code points used for generating the number
+Add ``` to beginning and end, also make a warning that they must be used
+
+maybe stop the thing from failing SILENTLY

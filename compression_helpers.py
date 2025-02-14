@@ -1,0 +1,1 @@
+"""This file contains functions for easily compressing files via many compression algorithms"""
