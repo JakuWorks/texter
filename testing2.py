@@ -8,9 +8,6 @@ import tempfile
 import atexit
 import tarfile
 
-# DONT FUCKING TAR SINGULAR FILES AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-# FUCK YOU STUPID NIGGER
-
 
 # Compression levels to try. For very small files, higher levels are not always the best
 ZSTD_LEVELS: tuple[int, ...] = tuple([*range(1, 23)])

@@ -2,7 +2,7 @@ from typing import Any
 import os
 import subprocess
 import pyperclip
-from texter.data_helpers import dict_keys_contain_substring
+from data_helpers import dict_keys_contain_substring
 from main import ANDROID_CLIPBOARD_TIMEOUT_SECONDS
 
 

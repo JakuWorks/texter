@@ -82,28 +82,29 @@ def make_light_archive():
 
     Here is how the TYPE looks (if it's present)
     ( [ { IS FOLDER } xxxxxx { IS ENDING } ] ? [ xxxxxxxx { IS ENDING } ] ... ? )
-    the xxx... - when contatenated this will be a number representing "how many times to go back
+    the xxx... - when contatenated this will be a number representing "how many times to go back"
 
     NAME TERMINATORS:
     - #0 - [ 00000000 ] - this means that it's a file and that xxx... is 0 -> the TYPE bytes are skipped (saves 1-2 bytes)
-    - #1 - [ 00101111 ] - this means that the TYPE should be read and handled
+    - #1 - [ 00101111 ] - this means that it's NOT a file and/or the xxx is NOT 0 -> the TYPE bytes are present
     *[ 00101111 ] is an '/' utf-8 character). This is the only utf8 character which cannot be uses in both ext4 and ntfs filenames
 
     If it's is a folder => the program automatically "goes" inside it => this is why the archive should always sorts folders to be last
 
     Here is what the xxx... number would be for each entry in an example archive:
     *on the right side there will be the bytes 'representing' the file
-    0  file         | ( FILE NAME ) [ NAME TERMINATOR #0 ] ( FILE LENGTH { IS ENDING } ) ( FILE DATA )
+    0  file         | ( FILE NAME ) [ NAME TERMINATOR #0 ] ( [ LENGTH { IS ENDING } ] ... ) ( FILE DATA )
     0  folder       | ( FILE NAME ) [ NAME TERMINATOR #1 ] [ 10000001 ]
-    0  /   file     | ( FILE NAME ) [ NAME TERMINATOR #0 ] ( FILE LENGTH { IS ENDING } ) ( FILE DATA )
+    0  /   file     | ( FILE NAME ) [ NAME TERMINATOR #0 ] ( [ LENGTH { IS ENDING } ] ... ) ( FILE DATA )
     0  /   folder   | ( FILE NAME ) [ NAME TERMINATOR #1 ] [ 10000001 ]
-    0  /   /   file | ( FILE NAME ) [ NAME TERMINATOR #0 ] ( FILE LENGTH { IS ENDING } ) ( FILE DATA )
-    1  /  file      | ( FILE NAME ) [ NAME TERMINATOR #1 ] [ 00000011 ] ( FILE LENGTH { IS ENDING } ) ( FILE DATA )
+    0  /   /   file | ( FILE NAME ) [ NAME TERMINATOR #0 ] ( [ LENGTH { IS ENDING } ] ... ) ( FILE DATA )
+    1  /  file      | ( FILE NAME ) [ NAME TERMINATOR #1 ] [ 00000011 ] ( [ LENGTH { IS ENDING } ] ... ) ( FILE DATA )
     0  /  folder    | ( FILE NAME ) [ NAME TERMINATOR #1 ] [ 10000001 ]
-    0  /   /  file  | ( FILE NAME ) [ NAME TERMINATOR #0 ] ( FILE LENGTH { IS ENDING } ) ( FILE DATA )
+    0  /   /  file  | ( FILE NAME ) [ NAME TERMINATOR #0 ] ( [ LENGTH { IS ENDING } ] ... ) ( FILE DATA )
     2  folder       | ( FILE NAME ) [ NAME TERMINATOR #1 ] [ 10000101 ]
-    0  /  file      | ( FILE NAME ) [ NAME TERMINATOR #0 ] ( FILE LENGTH { IS ENDING } ) ( FILE DATA )
-       /  Imagine 70 folders inside each other here
-    70 file
+    0  /  file      | ( FILE NAME ) [ NAME TERMINATOR #0 ] ( [ LENGTH { IS ENDING } ] ... ) ( FILE DATA )
+    0  /  Imagine 130 folders inside each other here
+    131folder       | ( FILE NAME ) [ NAME TERMINATOR #1 ] [ 10000010 ] [ 00000111 ] <- 131 in base2 is 10000011
+    0  /  file      | ( FILE NAME ) [ NAME TERMINATOR #0 ] ( [ LENGTH { IS ENDING } ] ... ) ( FILE DATA )
 
     """
