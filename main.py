@@ -1,15 +1,14 @@
 """This file is the heart of the program. This file controls the flow of the entire program at a high level"""
 import shutil
+import sys
+from cli_helpers import get_zip_target
+from number_base_helpers import as_high_base
+from settings import RECURSION_LIMIT
 
 
-# SETTINGS
-DEBUG_TOGGLE: bool = False
-ANDROID_CLIPBOARD_TIMEOUT_SECONDS: int = 5
-BLACKLISTED_UNICODE_CATEGORIES: set[str] = {'Cs', 'Cc', 'Cf', 'Mn', 'Mc'}
-UNICODE_HIGHEST_CODE_PONT: int = 0x10FFFF
-
-        
 def main() -> None:
+    sys.setrecursionlimit(RECURSION_LIMIT)
+
     zipping_target: str = get_zip_target()
     zip_basename: str = zipping_target
     zip_path: str = shutil.make_archive(base_name=zip_basename, format='zip', root_dir='.', base_dir=zipping_target,)

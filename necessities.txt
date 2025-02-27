@@ -5,7 +5,7 @@ PHONE:
 termux
 python
 pkg install termux-api
-INSTALL THE TERMUX API APP
+INSTALL TERMUX API APP
 
 PC:
 python
@@ -14,8 +14,27 @@ pyperclip
 BUILD:
 shiv
 
+DEVELOP:
+black
+mypy
+
 
 Add text indicating the number of code points used for generating the number
 Add ``` to beginning and end, also make a warning that they must be used
+SPLIT number_base_helpers into number_base_helpers and high_base
 
 maybe stop the thing from failing SILENTLY
+maybe make a script to run black over all files and call it 'format.sh'
+
+Notes:
+- Avoid using "the" in debug logs and errors to make them more concise
+
+
+CLI Support for:
+- text input
+- file input
+- files input
+and
+- text output
+- file output (text)
+- file output (as bytes, not unicode)

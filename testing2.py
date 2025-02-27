@@ -9,7 +9,7 @@ import atexit
 import tarfile
 
 
-# Compression levels to try. For very small files, higher levels are not always the best
+# Compression levels to try. For very small files, higher levels are not always best
 ZSTD_LEVELS: tuple[int, ...] = tuple([*range(1, 23)])
 
 
@@ -34,9 +34,9 @@ class TempFilesManager:
         to_delete: list[tuple[str, str | None]] = self.temp_files
         files_count: int = len(to_delete)
 
-        print('Deleting The Below Temp Files:')
+        print('Deleting Below Temp Files:')
         if files_count == 0:
-            print('There are no temp files to delete!')
+            print('No temp files to delete!')
         else:
             for path, label in self.temp_files:
                 if label:

@@ -1,0 +1,10 @@
+{
+    "cSpell.words": [
+        "archiver",
+        "NTFS",
+        "setrecursionlimit",
+        "unpackable"
+    ],
+    "mypy.dmypyExecutable": "${workspaceFolder}/venv/bin/dmypy",
+    "discord.enabled": true,
+}
