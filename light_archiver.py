@@ -69,11 +69,12 @@ This file contains functions regarding "Light Archives".
 # And a setting for the chunk size
 # This should be EASIER than making the archive format handling itself
 
-from typing import Collection, Coroutine, Literal
-from enum import Enum
+from typing import Collection
 from io import BufferedWriter, BufferedReader
-import os
+from enum import Enum
+import copy
 import math
+import os
 import shutil
 from pathlib import Path
 from settings import (
@@ -82,9 +83,10 @@ from settings import (
     COPY_BLOCK_SIZE_BYTES,
     LOGS_ERROR_PREFIX,
     LOGS_SEPARATOR as s,
+    LOGS_LIGHT_ARCHIVE_UNKNOWN_NAME as unknown_name,
 )
 from Logger import get_paths_text, logger as l
-from filesystem_helpers import get_nonexistent_paths, get_non_children_paths
+from filesystem_helpers import get_nonexistent_paths, get_non_children_paths, ensure_file_not_exist
 from number_base_helpers import as_base
 from data_helpers import pad_list_from_left
 
@@ -92,7 +94,8 @@ from data_helpers import pad_list_from_left
 # The children are respectively: Files and Directories
 type ArchiveChildren = tuple[Collection[Path], ArchiveStructure]
 type ArchiveStructure = dict[Path, ArchiveChildren]
-type UnpackedChildren = tuple[Collection[tuple[str, int, int]], UnpackedStructure] #NOTE: name, start, length
+type UnpackedFile = tuple[str, int, int]
+type UnpackedChildren = tuple[Collection[UnpackedFile], UnpackedStructure]
 type UnpackedStructure = dict[str, UnpackedChildren]
 
 
@@ -109,25 +112,18 @@ _NAME_TERMINATOR_1_DECODED: str = _NAME_TERMINATOR_1.decode("utf-8")
 
 
 def make_light_archive(
-    destination: Path, input_directory: Path, input_elements: Collection[Path]
+    destination: Path, input_directory: Path, input_elements: Collection[Path], debug_archive_id: int | None = None
 ) -> None:
     # Archive IDs are only used for debugging purposes
-    highest_archive_id_name: str = "highest_archive_id"
     archive_id: int
-    if not hasattr(make_light_archive, highest_archive_id_name):
-        archive_id = 1
+    if debug_archive_id is not None:
+        archive_id = debug_archive_id
     else:
-        highest_archive_id: int = getattr(make_light_archive, highest_archive_id_name)
-        archive_id = highest_archive_id + 1
-    setattr(make_light_archive, highest_archive_id_name, archive_id)
-    logs_infix: str = f"{make_light_archive.__name__}{s}{archive_id}{s}"
-
+        archive_id = new_archive_id()
+    logs_infix: str = f"{archive_id}{s}"
     l.debug(f"{logs_infix}Creating a light archive")
 
-    if destination.exists(follow_symlinks=True):
-        raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}A file already exists at the destination! {destination}"
-        )
+    ensure_file_not_exist(destination)
 
     with open(destination, "wb") as dest:
         structure: ArchiveStructure = get_structure(
@@ -136,13 +132,25 @@ def make_light_archive(
         write_archive(dest, structure, archive_id)
 
 
+def new_archive_id() -> int:
+    highest_archive_id_name: str = "highest_archive_id"
+    archive_id: int
+    if not hasattr(make_light_archive, highest_archive_id_name):
+        archive_id = 1
+    else:
+        highest_archive_id: int = getattr(make_light_archive, highest_archive_id_name)
+        archive_id = highest_archive_id + 1
+    setattr(make_light_archive, highest_archive_id_name, archive_id)
+    assert archive_id > 0
+    return archive_id
+
+
 def get_structure(
     input_directory: Path, input_elements: Collection[Path], archive_id: int = 0
 ) -> ArchiveStructure:
     # Careful! This function is recursive
-    # Archive IDs are only used for debugging purposes
-    logs_infix: str = f"{get_structure.__name__}{s}{archive_id}{s}"
-
+    # TODO: TO BE REMADE
+    logs_infix: str = f"{s}{archive_id}{s}"
     l.debug(
         f"{logs_infix}Making archive structure{s}input dir: {input_directory}"
         f"{s}Selected {len(input_elements)} elements"
@@ -153,8 +161,8 @@ def get_structure(
     nonexistent_paths: set[Path] = get_nonexistent_paths(all_paths)
     if len(nonexistent_paths):
         nonexistent_paths_text: str = get_paths_text(nonexistent_paths)
-        raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Elements don't exist!"
+        l.runtime_error(
+            f"{logs_infix}Elements don't exist!"
             f"{s}Dir: {input_directory}{s}Nonexistent Elements:{s}{nonexistent_paths_text}"
         )
 
@@ -170,7 +178,6 @@ def get_structure(
 
     files: set[Path] = set()
     sub_structures: list[ArchiveStructure] = []
-
     for child in input_elements:
         # make sure they're in the same directory
         if child.is_file():
@@ -181,30 +188,21 @@ def get_structure(
             sub_structures.append(sub_structure)
         else:
             l.warn(f"{logs_infix}Unusual file! SKIPPING!{s}{str(child)}")
-
     directories: ArchiveStructure = {
         k: v for sub_structure in sub_structures for k, v in sub_structure.items()
     }
-
     structure: ArchiveStructure = {input_directory: (files, directories)}
 
-    l.debug(f"{logs_infix}Finished making archive structure")
-
+    l.debug(f"{logs_infix}Finished making an element of archive structure")
     return structure
 
 
-# NOTE TO SELF
-# RETURN THE "CREATED DEPTH" BY THE FUNCTION
-# INPUT A GO_UP
-# IN A CHAIN OF DIRECTORIES THE CREATED DEPTH FROM THE PREVIOUS CALL IS CHAINED TO THE GO_UP
-# THE CREATED DEPTH IS ALWAYS THE CREATED DEPTH OF THE LAST CHILD DIR + 1
-# FUCK THE STACK WE'RE MAKING THIS SHIT RECURSIVE
+
+
 def write_archive(
     dest: BufferedWriter, structure: ArchiveStructure, archive_id: int = 0
 ) -> None:
-    # Archive IDs are only used for debugging purposes
-    # This function does not perform any checks for existence of files
-    # It also assumes that the 'structure' is correct
+    assert isinstance(dest, BufferedWriter)
     logs_infix: str = f"{write_archive.__name__}{s}{archive_id}{s}"
     l.debug(f"{logs_infix}Beginning writing to light archive...")
 
@@ -237,13 +235,10 @@ def write_encoded_children_bytes(
     for dir, children in dirs.items():
         l.debug(f"{logs_infix}Encoding and writing bytes of dir {dir}")
         write_encoded_dir_bytes(dest, dir, created_depth, archive_id)
-
         created_depth = write_encoded_children_bytes(dest, children, archive_id)
-        print(f"Got {created_depth} from {dir}")
         # The created depth from one call goes to the go ups of the next call
 
     created_depth = created_depth + 1
-
     return created_depth
 
 
@@ -297,7 +292,6 @@ def get_encoded_int(num: int) -> bytes:
     as_base2: list[int] = as_base(num, 2)
     bytes_count: int = math.ceil(len(as_base2) / usable_bits_per_byte)
 
-    # This simply chops the bits into slices while filling the rightmost byte (the leftmost byte will later be padded with zeros from the left side)
     reversed_as_base2: list[int] = list(reversed(as_base2))
     reversed_encoded_as_bytes: list[list[int]] = []
     for i in range(bytes_count):
@@ -367,41 +361,110 @@ def unpack_light_archive(archive: Path, dest: Path) -> None:
 
     with open(archive, "rb") as f:
         # DEV
-        unpack_structure(f, archive.name)
+        print("-" * 50)
+        print(unpack_structure(f, archive.name))
         pass
 
 
 def unpack_structure(
-    archive: BufferedReader, archive_name: str = "Unknown"
+    archive: BufferedReader, archive_name: str = unknown_name
 ) -> UnpackedStructure:
     archive_name_infix: str = f"Name: {archive_name}{s}"
     logs_infix: str = f"{unpack_structure.__name__}{s}{archive_name_infix}"
+    tip_postfix: str = f"{s}Tip: Your archive may be invalid"
+    l.debug(f"{logs_infix}Building structure")
 
+    # This entire implementation works thanks to reference semantics
     structure: UnpackedStructure = {}
+    # The scope is a list with handles of the "dictionaries" that belong to each element
+    scope: list[UnpackedStructure] = [structure]  # This must never be empty
+    curr_dir_name: str = "ROOT"
+    curr_files: list[UnpackedFile] = []
     while True:
         name: str
         type: UnpackedType
-        name, type = unpack_identify_element(archive, archive_name)
-        
-        curr_files: list[tuple[str, int, int]] = []
-        if type == UnpackedType.DIR:
-            go_ups: int = unpack_decode_next_int(archive, archive_name)
-            
-        elif type == UnpackedType.FILE:
-            length: int = unpack_decode_next_int(archive, archive_name)
-        else:
-            raise RuntimeError(f"{LOGS_ERROR_PREFIX}{logs_infix}{type}{s}Unsupported element type!")
 
-    return dict()
+        is_eof: bool = not archive.peek(1)
+        if is_eof:
+            scope[-1][curr_dir_name] = (curr_files, {})
+            l.debug(f"{logs_infix}Finished building structure (EOF)")
+            break
+
+        name, type = unpack_identify_element(archive, archive_name)
+        if type == UnpackedType.FILE:
+            length: int = unpack_decode_next_int(archive, archive_name)
+            start: int = archive.tell()
+            file_info: UnpackedFile = (name, start, length)
+            curr_files.append(file_info)
+            l.debug(
+                f"{logs_infix}Type: {UnpackedType.FILE.value}{s}Start: {start}{s}Length: {length}{s}Added element to structure"
+            )
+            archive.seek(length, 1)  # Skipping DATA and going to the next element
+        elif type == UnpackedType.DIR:
+            go_ups: int = unpack_decode_next_int(archive, archive_name)
+            substructure: UnpackedStructure = {}
+            files: list[UnpackedFile] = copy.copy(curr_files)
+            scope[-1][curr_dir_name] = (files, substructure)
+            l.debug(
+                f"{logs_infix}Type: {UnpackedType.DIR.value}{s}Name: {name}{s}Go Ups: {go_ups}{s}Added element to structure"
+            )
+
+            # Preparing for next dir (enacting go ups, etc.)
+            scope.append(substructure)
+            curr_dir_name = name
+            curr_files.clear()
+
+            structure_scope_length: int = len(scope)
+            if go_ups >= len(scope):
+                raise RuntimeError(
+                    f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Archive cannot have negative depth!"
+                    f"{s}GO_UPS: {go_ups}{s}Scope Length: {structure_scope_length}{tip_postfix}"
+                )
+            if go_ups != 0:
+                del scope[-go_ups:]
+        else:
+            raise RuntimeError(
+                f"{LOGS_ERROR_PREFIX}{s}{logs_infix}{type}{s}Unsupported element type!"
+            )
+
+    return structure
+
+
+def unpack_flatten_structure(
+    archive: BufferedReader,
+    structure: UnpackedStructure,
+    archive_name: str = unknown_name,
+) -> tuple[list[Path], set[UnpackedFile]]:
+    archive_name_infix: str = f"Name: {archive_name}{s}"
+    logs_infix: str = f"{unpack_flatten_structure.__name__}{s}{archive_name_infix}"
+    l.debug(f"{logs_infix}Flattening unpacked structure")
+
+    roots_count: int = len(structure.keys())
+    if roots_count > 1 or roots_count < 1:
+        # Hardcoded because it's the nature of the format
+        raise RuntimeError(
+            f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Got {roots_count} roots in unpacked light archive structure instead of 1!"
+        )
+
+    dirs: list[Path] = []
+    files: list[Path] = []
+    stack: list[tuple[Path, UnpackedChildren]] = []
+
+    while stack:
+        files
+
+    return tuple([], {})
 
 
 def unpack_identify_element(
-    archive: BufferedReader, archive_name: str = "Unknown"
+    archive: BufferedReader, archive_name: str = unknown_name
 ) -> tuple[str, UnpackedType]:
-    # This function moves the pointer of the archive to the beginning of the DATA
+    # This function also moves the pointer of the archive to the beginning of the DATA
     archive_name_infix: str = f"Name: {archive_name}{s}"
     initial_pointer_pos: int = archive.tell()
-    logs_infix: str = f"{unpack_identify_element.__name__}{s}{archive_name_infix}Pointer: {initial_pointer_pos}{s}"
+    logs_infix: str = (
+        f"{unpack_identify_element.__name__}{s}{archive_name_infix}Pointer: {initial_pointer_pos}{s}"
+    )
     tip_postfix: str = f"{s}Tip: Your archive may be invalid"
     l.debug(f"{logs_infix}Identifying element")
 
@@ -419,6 +482,7 @@ def unpack_identify_element(
             break
         elif not byte:
             raise RuntimeError(
+                # EOFs are handled elsewhere
                 f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Reached EOF when trying to identify!{tip_postfix}"
             )
         else:
@@ -440,12 +504,16 @@ def unpack_identify_element(
     return (name, type)
 
 
-def unpack_decode_next_int(archive: BufferedReader, archive_name: str = "Unknown") -> int:
+def unpack_decode_next_int(
+    archive: BufferedReader, archive_name: str = unknown_name
+) -> int:
     # This function does not need to be fast. For every element in the archive there should be
     # one encoded int that's most likely going to be 1-10 bytes long (very short)
     archive_name_infix: str = f"Name: {archive_name}{s}"
     initial_pointer_pos: int = archive.tell()
-    logs_infix: str = f"{unpack_decode_next_int.__name__}{s}{archive_name_infix}Pointer: {initial_pointer_pos}{s}"
+    logs_infix: str = (
+        f"{unpack_decode_next_int.__name__}{s}{archive_name_infix}Pointer: {initial_pointer_pos}{s}"
+    )
     tip_postfix: str = f"{s}Tip: Your archive may be invalid"
     l.debug(f"{logs_infix}Decoding int")
 
@@ -464,14 +532,16 @@ def unpack_decode_next_int(archive: BufferedReader, archive_name: str = "Unknown
             )
         byte_as_int: int = int.from_bytes(byte, byteorder="big", signed=False)
         base2: list[int] = as_base(byte_as_int, 2)
-        bits: list[int] = pad_list_from_left(base2, 0, 8) 
+        bits: list[int] = pad_list_from_left(base2, 0, 8)
         bits_length: int = len(bits)
         if bits_length > 8:
-            raise RuntimeError(f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Incorrect bits length ({bits_length})")
+            raise RuntimeError(
+                f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Incorrect bits length ({bits_length})"
+            )
 
         usable_bits: list[int] = bits[:7]
         num_bytes.append(usable_bits)
-        
+
         is_ending: bool = bool(bits[7])
         if is_ending:
             break

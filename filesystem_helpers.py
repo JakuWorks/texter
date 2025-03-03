@@ -63,7 +63,17 @@ def get_non_children_paths(parent: Path, paths: Collection[Path]) -> set[Path]:
         is_child: bool = path.parent == parent
         if not is_child:
             non_children.add(path)
+
     return non_children
+
+
+# def ensure_children_paths(parent: Path, paths: Collection[Path]) -> None:
+#     non_children: set[Path] = get_non_children_paths(parent, paths)
+
+
+def ensure_file_not_exist(file: Path) -> None:
+    if file.exists(follow_symlinks=True):
+        l.runtime_error(f"A file already exists at the destination! {file}")
 
 
 def get_nonexistent_paths(paths: Collection[Path]) -> set[Path]:

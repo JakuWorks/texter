@@ -9,6 +9,7 @@ src = r'/home/msikatana-2/Desktop/inputt/'
 d1 = fr'{src}/1/'
 d2 = fr'{src}/a/'
 d3 = fr'{src}/e/'
-light_archiver.make_light_archive(Path(dest), Path(src), [Path(d1), Path(d2), Path(d3)])
+d4 = fr'{src}froot'
+light_archiver.make_light_archive(Path(dest), Path(src), [Path(d1), Path(d2), Path(d3), Path(d4)])
 
 # light_archiver.get_encoded_int(4)
