@@ -3,7 +3,7 @@
 from typing import Collection
 import os
 from pathlib import Path
-from settings import LOGS_ERROR_PREFIX, LOGS_SEPARATOR as s
+from settings import LOGS_ERROR_GENERIC_PREFIX, LOGS_SEPARATOR as s
 from Logger import logger as l
 
 
@@ -22,7 +22,7 @@ def get_selected_files_in_dir(dir: str, names: Collection[str]) -> set[Path]:
     main_dir_exists: bool = main_dir.exists(follow_symlinks=False)
     if not main_dir_exists:
         raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}{logs_infix}{main_dir}{s}Main dir doesn't exist!"
+            f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}{main_dir}{s}Main dir doesn't exist!"
         )
     l.debug(f"{logs_infix}{main_dir}{s}Main dir exists")
 
@@ -31,14 +31,14 @@ def get_selected_files_in_dir(dir: str, names: Collection[str]) -> set[Path]:
     invalid_paths: set[Path] = get_nonexistent_paths(paths)
     if len(invalid_paths) > 0:
         raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}{logs_infix}{invalid_paths}{s}Files don't exist!"
+            f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}{invalid_paths}{s}Files don't exist!"
         )
     l.debug(f"{logs_infix}All files exist{s}")
 
     unrelated_paths: set[Path] = get_unrelated_paths(main_dir, paths)
     if len(unrelated_paths) > 0:
         raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}{logs_infix}{unrelated_paths}{s}Files aren't relative to main dir! ({main_dir.resolve()})"
+            f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}{unrelated_paths}{s}Files aren't relative to main dir! ({main_dir.resolve()})"
         )
     l.debug(f"{logs_infix}All files are relative to main dir")
 

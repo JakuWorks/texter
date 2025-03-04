@@ -1,6 +1,6 @@
 from typing import Collection
 from pathlib import Path
-from settings import IS_DEBUG, LOGS_DEBUG_PREFIX, LOGS_WARNING_PREFIX, LOGS_ERROR_PREFIX, LOGS_SEPARATOR as s
+from settings import IS_DEBUG, LOGS_DEBUG_PREFIX, LOGS_WARNING_PREFIX, LOGS_ERROR_GENERIC_PREFIX, LOGS_SEPARATOR as s
 from python_helpers import get_caller, UNKNOWN_CALLER_NAME
 
 
@@ -33,7 +33,7 @@ class Logger:
 
         text: str
         try:
-            text = f"{LOGS_ERROR_PREFIX}{s}{caller_infix}{message}"
+            text = f"{LOGS_ERROR_GENERIC_PREFIX}{s}{caller_infix}{message}"
         except:
             text = message
 

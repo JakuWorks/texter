@@ -81,12 +81,17 @@ from settings import (
     LIGHT_ARCHIVE_UNPACK_EXPECTED_MAX_ENCODED_INT_BYTES,
     LIGHT_ARCHIVE_UNPACK_EXPECTED_MAX_NAME_BYTES,
     COPY_BLOCK_SIZE_BYTES,
-    LOGS_ERROR_PREFIX,
+    LOGS_ERROR_GENERIC_PREFIX,
+    LOGS_ERROR_ASSERTION_PREFIX,
     LOGS_SEPARATOR as s,
     LOGS_LIGHT_ARCHIVE_UNKNOWN_NAME as unknown_name,
 )
 from Logger import get_paths_text, logger as l
-from filesystem_helpers import get_nonexistent_paths, get_non_children_paths, ensure_file_not_exist
+from filesystem_helpers import (
+    get_nonexistent_paths,
+    get_non_children_paths,
+    ensure_file_not_exist,
+)
 from number_base_helpers import as_base
 from data_helpers import pad_list_from_left
 
@@ -104,6 +109,7 @@ class UnpackedType(Enum):
     DIR = "dir"
 
 
+STRUCTURE_ROOT_KEY: Path = Path("ROOT")
 # DO NOT CHANGE!
 _NAME_TERMINATOR_0: bytes = b"\x00"
 _NAME_TERMINATOR_0_DECODED: str = _NAME_TERMINATOR_0.decode("utf-8")
@@ -112,7 +118,10 @@ _NAME_TERMINATOR_1_DECODED: str = _NAME_TERMINATOR_1.decode("utf-8")
 
 
 def make_light_archive(
-    destination: Path, input_directory: Path, input_elements: Collection[Path], debug_archive_id: int | None = None
+    destination: Path,
+    input_directory: Path,
+    input_elements: Collection[Path],
+    debug_archive_id: int | None = None,
 ) -> None:
     # Archive IDs are only used for debugging purposes
     archive_id: int
@@ -124,12 +133,11 @@ def make_light_archive(
     l.debug(f"{logs_infix}Creating a light archive")
 
     ensure_file_not_exist(destination)
-
     with open(destination, "wb") as dest:
         structure: ArchiveStructure = get_structure(
             input_directory, input_elements, archive_id
         )
-        write_archive(dest, structure, archive_id)
+        write_archive_from_structure(dest, structure, archive_id)
 
 
 def new_archive_id() -> int:
@@ -148,7 +156,6 @@ def new_archive_id() -> int:
 def get_structure(
     input_directory: Path, input_elements: Collection[Path], archive_id: int = 0
 ) -> ArchiveStructure:
-    # Careful! This function is recursive
     # TODO: TO BE REMADE
     logs_infix: str = f"{s}{archive_id}{s}"
     l.debug(
@@ -172,14 +179,13 @@ def get_structure(
     if len(non_children_paths):
         non_children_paths_text: str = get_paths_text(non_children_paths)
         raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Elements aren't children of input directory!"
+            f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}Elements aren't children of input directory!"
             f"{s}Dir: {input_directory}{s}Non-Child Elements:{s}{non_children_paths_text}"
         )
 
     files: set[Path] = set()
     sub_structures: list[ArchiveStructure] = []
     for child in input_elements:
-        # make sure they're in the same directory
         if child.is_file():
             files.add(child)
         elif child.is_dir():
@@ -188,34 +194,42 @@ def get_structure(
             sub_structures.append(sub_structure)
         else:
             l.warn(f"{logs_infix}Unusual file! SKIPPING!{s}{str(child)}")
+
     directories: ArchiveStructure = {
         k: v for sub_structure in sub_structures for k, v in sub_structure.items()
     }
     structure: ArchiveStructure = {input_directory: (files, directories)}
-
     l.debug(f"{logs_infix}Finished making an element of archive structure")
     return structure
 
 
-
-
-def write_archive(
+def write_archive_from_structure(
     dest: BufferedWriter, structure: ArchiveStructure, archive_id: int = 0
 ) -> None:
-    assert isinstance(dest, BufferedWriter)
-    logs_infix: str = f"{write_archive.__name__}{s}{archive_id}{s}"
+    logs_infix: str = f"{write_archive_from_structure.__name__}{s}{archive_id}{s}"
     l.debug(f"{logs_infix}Beginning writing to light archive...")
 
-    roots_count: int = len(structure.keys())
-    if roots_count > 1 or roots_count < 1:
-        # Hardcoded because it's the nature of the format
-        raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Got {roots_count} roots in light archive structure instead of 1!"
-        )
+    assert check_structure_has_root(structure), (
+        f"{LOGS_ERROR_ASSERTION_PREFIX}{s}{logs_infix}Keys: {structure.keys()}{s}"
+        f'Light archive structure must have a "{STRUCTURE_ROOT_KEY}" key at root level!'
+    )
 
-    root_children: ArchiveChildren = next(iter(structure.values()))
+    assert check_structure_roots_count(structure), (
+        f"{LOGS_ERROR_ASSERTION_PREFIX}{s}{logs_infix}Keys: {structure.keys()}{s}"
+        f"Light archive structure has too many keys at root level!"
+    )
+
+    root_children: ArchiveChildren = structure[STRUCTURE_ROOT_KEY]
     write_encoded_children_bytes(dest, root_children, archive_id)
     l.debug(f"{logs_infix}Finished writing to light archive...")
+
+
+def check_structure_has_root(structure: ArchiveStructure) -> bool:
+    return STRUCTURE_ROOT_KEY in structure.keys()
+
+
+def check_structure_roots_count(structure: ArchiveStructure) -> bool:
+    return len(structure.keys()) == 1
 
 
 def write_encoded_children_bytes(
@@ -251,15 +265,15 @@ def write_encoded_file_bytes(dest: BufferedWriter, path: Path, archive_id: int):
     name: str = path.name
     if not len(name):
         raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Filename cannot be empty!"
+            f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}Filename cannot be empty!"
         )
     if _NAME_TERMINATOR_0_DECODED in name:
         raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Filename cannot contain Terminator #0: {_NAME_TERMINATOR_0_DECODED}"
+            f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}Filename cannot contain Terminator #0: {_NAME_TERMINATOR_0_DECODED}"
         )
     if _NAME_TERMINATOR_1_DECODED in name:
         raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Filename cannot contain Terminator #1: {_NAME_TERMINATOR_1_DECODED}"
+            f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}Filename cannot contain Terminator #1: {_NAME_TERMINATOR_1_DECODED}"
         )
 
     size: int = os.path.getsize(path)
@@ -278,6 +292,28 @@ def write_encoded_file_bytes(dest: BufferedWriter, path: Path, archive_id: int):
 
     with open(path, "rb") as f:
         shutil.copyfileobj(f, dest, length=COPY_BLOCK_SIZE_BYTES)
+
+
+def write_encoded_dir_bytes(
+    dest: BufferedWriter, name: str, go_up: int, archive_id: int
+) -> None:
+    logs_infix: str = f"{write_encoded_dir_bytes.__name__}{s}{archive_id}{s}"
+
+    if not len(name):
+        raise RuntimeError(
+            f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}Filename cannot be empty!"
+        )
+    if _NAME_TERMINATOR_0_DECODED in name:
+        raise RuntimeError(
+            f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}{name}{s}Filename cannot contain Terminator #0: {_NAME_TERMINATOR_0_DECODED}"
+        )
+    if _NAME_TERMINATOR_1_DECODED in name:
+        raise RuntimeError(
+            f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}{name}{s}Filename cannot contain Terminator #1: {_NAME_TERMINATOR_1_DECODED}"
+        )
+    go_up_bytes: bytes = get_encoded_int(go_up)
+    dest.write(name.encode("utf-8") + _NAME_TERMINATOR_1 + go_up_bytes)
+    l.debug(f"{logs_infix}Getting dir bytes")
 
 
 def get_encoded_int(num: int) -> bytes:
@@ -324,37 +360,13 @@ def get_encoded_int(num: int) -> bytes:
     return encoded
 
 
-def write_encoded_dir_bytes(
-    dest: BufferedWriter, path: Path, go_up: int, archive_id: int
-) -> None:
-    logs_infix: str = f"{write_encoded_dir_bytes.__name__}{s}{archive_id}{s}"
-
-    name: str = path.name
-    if not len(name):
-        raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Filename cannot be empty!"
-        )
-    if _NAME_TERMINATOR_0_DECODED in name:
-        raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Filename cannot contain Terminator #0: {_NAME_TERMINATOR_0_DECODED}"
-        )
-    if _NAME_TERMINATOR_1_DECODED in name:
-        raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Filename cannot contain Terminator #1: {_NAME_TERMINATOR_1_DECODED}"
-        )
-
-    go_up_bytes: bytes = get_encoded_int(go_up)
-    dest.write(name.encode("utf-8") + _NAME_TERMINATOR_1 + go_up_bytes)
-    l.debug(f"{logs_infix}Getting dir bytes")
-
-
 def unpack_light_archive(archive: Path, dest: Path) -> None:
     archive_name_infix: str = f"Name: {archive.name}{s}"
     logs_infix: str = f"{unpack_light_archive.__name__}{s}{archive_name_infix}"
 
     if not archive.exists():
         raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}{logs_infix}{archive}{s}File Doesn't Exist"
+            f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}{archive}{s}File Doesn't Exist"
         )
     if not dest.exists():
         os.mkdir(dest)
@@ -378,7 +390,7 @@ def unpack_structure(
     structure: UnpackedStructure = {}
     # The scope is a list with handles of the "dictionaries" that belong to each element
     scope: list[UnpackedStructure] = [structure]  # This must never be empty
-    curr_dir_name: str = "ROOT"
+    curr_dir_name: str = STRUCTURE_ROOT_KEY
     curr_files: list[UnpackedFile] = []
     while True:
         name: str
@@ -417,14 +429,14 @@ def unpack_structure(
             structure_scope_length: int = len(scope)
             if go_ups >= len(scope):
                 raise RuntimeError(
-                    f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Archive cannot have negative depth!"
+                    f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}Archive cannot have negative depth!"
                     f"{s}GO_UPS: {go_ups}{s}Scope Length: {structure_scope_length}{tip_postfix}"
                 )
             if go_ups != 0:
                 del scope[-go_ups:]
         else:
             raise RuntimeError(
-                f"{LOGS_ERROR_PREFIX}{s}{logs_infix}{type}{s}Unsupported element type!"
+                f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}{type}{s}Unsupported element type!"
             )
 
     return structure
@@ -443,7 +455,7 @@ def unpack_flatten_structure(
     if roots_count > 1 or roots_count < 1:
         # Hardcoded because it's the nature of the format
         raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Got {roots_count} roots in unpacked light archive structure instead of 1!"
+            f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}Got {roots_count} roots in unpacked light archive structure instead of 1!"
         )
 
     dirs: list[Path] = []
@@ -483,20 +495,20 @@ def unpack_identify_element(
         elif not byte:
             raise RuntimeError(
                 # EOFs are handled elsewhere
-                f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Reached EOF when trying to identify!{tip_postfix}"
+                f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}Reached EOF when trying to identify!{tip_postfix}"
             )
         else:
             name_bytes.extend(byte)
 
         if len(name_bytes) > max_len:
             raise RuntimeError(
-                f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Reached max name bytes ({max_len}) when trying to identify!{tip_postfix}"
+                f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}Reached max name bytes ({max_len}) when trying to identify!{tip_postfix}"
             )
 
     name_bytes_len: int = len(name_bytes)
     if not type or not len(name_bytes):
         raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Failed to identify element!{s}Type: {type}{s}Name Length: {name_bytes_len}"
+            f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}Failed to identify element!{s}Type: {type}{s}Name Length: {name_bytes_len}"
         )
 
     # Decoding errors are raised by this function itself
@@ -522,13 +534,13 @@ def unpack_decode_next_int(
     while True:
         if len(num_bytes) >= max_len:
             raise RuntimeError(
-                f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Reached max encoded int length ({max_len}) when trying to decode!{tip_postfix}"
+                f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}Reached max encoded int length ({max_len}) when trying to decode!{tip_postfix}"
             )
 
         byte: bytes = archive.read(1)
         if not byte:
             raise RuntimeError(
-                f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Reached EOF when decoding int!{tip_postfix}"
+                f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}Reached EOF when decoding int!{tip_postfix}"
             )
         byte_as_int: int = int.from_bytes(byte, byteorder="big", signed=False)
         base2: list[int] = as_base(byte_as_int, 2)
@@ -536,7 +548,7 @@ def unpack_decode_next_int(
         bits_length: int = len(bits)
         if bits_length > 8:
             raise RuntimeError(
-                f"{LOGS_ERROR_PREFIX}{s}{logs_infix}Incorrect bits length ({bits_length})"
+                f"{LOGS_ERROR_GENERIC_PREFIX}{s}{logs_infix}Incorrect bits length ({bits_length})"
             )
 
         usable_bits: list[int] = bits[:7]

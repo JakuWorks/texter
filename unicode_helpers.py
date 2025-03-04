@@ -5,7 +5,7 @@ from Logger import logger as l
 from settings import (
     UNICODE_HIGHEST_CODE_PONT,
     BLACKLISTED_UNICODE_CATEGORIES,
-    LOGS_ERROR_PREFIX,
+    LOGS_ERROR_GENERIC_PREFIX,
     LOGS_SEPARATOR as s,
 )
 
@@ -31,7 +31,7 @@ def _get_allowed_unicode_signs() -> tuple[str, ...]:
     l.debug(f"{logs_infix}Selected {signs_length} unicode code points")
     if signs_length == 0:
         raise RuntimeError(
-            f"{LOGS_ERROR_PREFIX}{s}Found ZERO valid code points for your highest code point setting ({UNICODE_HIGHEST_CODE_PONT})"
+            f"{LOGS_ERROR_GENERIC_PREFIX}{s}Found ZERO valid code points for your highest code point setting ({UNICODE_HIGHEST_CODE_PONT})"
         )
 
     return signs_tuple
